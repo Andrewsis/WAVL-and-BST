@@ -1,0 +1,450 @@
+#include <iostream>
+#include <random>
+#include <chrono>
+using namespace std;
+
+struct Node
+{
+    Node* parent;
+    Node* right;
+    Node* left;
+
+    double value;
+    int rank;
+
+    Node()
+    {
+        rank = 0;
+        value = 0;
+        right = nullptr;
+        left = nullptr;
+        parent = nullptr;
+    }
+};
+
+class WavlTree
+{
+private:
+    Node* parentRoot = nullptr;
+    int size = 0;
+    int visitedNodes = 0;
+    int rotations = 0;
+
+    void Add(double value, Node* (&root))
+    {
+        if (root == nullptr)
+        {
+            root = new Node;
+            root->value = value;
+            ++size;
+        }
+        else
+        {
+            ++visitedNodes;
+            if (value >= root->value)
+            {
+                Add(value, root->right);
+                if (root->right->parent == nullptr) root->right->parent = root;
+            }
+            else
+            {
+                Add(value, root->left);
+                if (root->left->parent == nullptr) root->left->parent = root;
+            }
+            Balance(root);
+        }
+    }
+
+    void InorderWalk(Node* (&root))
+    {
+        if (root == nullptr)
+        {
+            return;
+        }
+        else
+        {
+            InorderWalk(root->left);
+            cout << root->value << ' ';
+            InorderWalk(root->right);
+        }
+    }
+
+    double Successor(Node* root)
+    {
+        if (root->right) return MinRoot(root->right)->value;
+
+        Node* temp = root->parent;
+
+        while (temp != nullptr && root == temp->right)
+        {
+            root = temp;
+            temp = temp->parent;
+        }
+
+        if (temp == nullptr) return -1;
+        return temp->value;
+    }
+
+    double Predecessor(Node* root)
+    {
+        if (root->left) return MaxRoot(root->left)->value;
+
+        Node* temp = root->parent;
+
+        while (temp != nullptr && root == temp->left)
+        {
+            root = temp;
+            temp = temp->parent;
+        }
+
+        if (temp == nullptr) return -1;
+        return temp->value;
+    }
+
+    Node* MinRoot(Node* root)
+    {
+        if (root->left == nullptr) return root;
+        return MinRoot(root->left);
+    }
+
+    Node* MaxRoot(Node* root)
+    {
+        if (root->right == nullptr) return root;
+        return MaxRoot(root->right);
+    }
+
+    Node* Search(double value, Node* (&root))
+    {
+        if (root == nullptr) return nullptr;
+
+        if (value == root->value) return root;
+        else if (value < root->value) Search(value, root->left);
+        else Search(value, root->right);
+    }
+
+    Node* Remove(Node* (&root), double value)
+    {
+        if (root == nullptr) return root;
+
+        if (value < root->value)
+        {
+            root->left = Remove(root->left, value);
+        }
+        else if (value > root->value)
+        {
+            root->right = Remove(root->right, value);
+        }
+        else if (root->left && root->right)
+        {
+            root->value = MinRoot(root->right)->value;
+            root->right = Remove(root->right, root->value);
+        }
+        else
+        {
+            if (root->left) root = root->left;
+            else if (root->right) root = root->right;
+            else root = nullptr;
+        }
+
+        Balance(root);
+        return root;
+    }
+
+    void CreatePath(Node* root, double value, int& index, double* path)
+    {
+        if (root == nullptr) return;
+
+        if (value == root->value)
+        {
+            path[index] = root->value;
+            index++;
+        }
+        else if (value < root->value)
+        {
+            path[index] = root->value;
+            index++;
+            CreatePath(root->left, value, index, path);
+        }
+        else
+        {
+            path[index] = root->value;
+            index++;
+            CreatePath(root->right, value, index, path);
+        }
+    }
+
+    double* FindFloor(Node* parentRoot, double floor, double ceil)
+    {
+        int index = 0;
+        for (int i = floor; i < ceil + 1; ++i)
+        {
+            if (Search(i, parentRoot) != nullptr)
+            {
+                double* smallestRoot = new double[getSize()];
+                CreatePath(parentRoot, Search(i, parentRoot)->value, index, smallestRoot);
+
+                double* result = new double[index + 1];
+
+                result[0] = index;
+                for (int i = 1; i < index + 1; i++)
+                {
+                    result[i] = smallestRoot[i - 1];
+                }
+                return result;
+            }
+        }
+
+        double* notFound = new double[1];
+        notFound[0] = -1;
+        return notFound;
+    }
+
+    double* FindCeil(Node* parentRoot, double floor, double ceil)
+    {
+        int index = 0;
+        for (int i = ceil; i > floor - 1; --i)
+        {
+            if (Search(i, parentRoot) != nullptr)
+            {
+                double* biggestRoot = new double[getSize()];
+                CreatePath(parentRoot, Search(i, parentRoot)->value, index, biggestRoot);
+
+                double* result = new double[index + 1];
+
+                result[0] = index;
+                for (int i = 1; i < index + 1; i++)
+                {
+                    result[i] = biggestRoot[i - 1];
+                }
+                return result;
+            }
+        }
+
+        double* notFound = new double[1];
+        notFound[0] = -1;
+        return notFound;
+    }
+
+    double** FindRange(Node* parentRoot, double floor, double ceil)
+    {
+        double* lowestPath = FindFloor(parentRoot, floor, ceil);
+        double* biggestPath = FindCeil(parentRoot, floor, ceil);
+
+        double** array = new double* [2];
+        for (int i = 0; i < 2; ++i)
+        {
+            array[i] = new double[getSize()];
+        }
+        array[0] = lowestPath;
+        array[1] = biggestPath;
+
+        return array;
+    }
+
+    int getHeight(Node* root)
+    {
+        if (root == nullptr) return 0;
+        int leftHeight = getHeight(root->left);
+        int rightHeight = getHeight(root->right);
+        return max(leftHeight, rightHeight) + 1;
+    }
+
+    int GetRank(Node* root)
+    {
+        if (!root) return -1;
+        return root->rank;
+    }
+
+    void SetRank(Node* root)
+    {
+        root->rank = max(GetRank(root->left), GetRank(root->right)) + 1;
+    }
+
+    void RotateLeft(Node* root) {
+        Node* temp = root->right;
+        root->right = temp->left;
+
+        if (temp->left != nullptr) temp->left->parent = root;
+
+        temp->parent = root->parent;
+        if (root->parent == nullptr)
+            parentRoot = temp;
+        else if (root == root->parent->left)
+            root->parent->left = temp;
+        else
+            root->parent->right = temp;
+
+        temp->left = root;
+        root->parent = temp;
+        SetRank(root);
+        SetRank(temp);
+    }
+
+    void RotateRight(Node* root)
+    {
+        Node* temp = root->left;
+        root->left = temp->right;
+
+        if (temp->right != nullptr) temp->right->parent = root;
+
+        temp->parent = root->parent;
+        if (root->parent == nullptr)
+            parentRoot = temp;
+        else if (root == root->parent->right)
+            root->parent->right = temp;
+        else
+            root->parent->left = temp;
+
+        temp->right = root;
+        root->parent = temp;
+        SetRank(root);
+        SetRank(temp);
+    }
+
+    void Balance(Node* root)
+    {
+        if (!root) return;
+
+        int rankDiffLeft = GetRank(root->left) - GetRank(root->right);
+        int rankDiffRight = GetRank(root->right) - GetRank(root->left);
+
+        if (rankDiffLeft == 2)
+        {
+            ++rotations;
+            if (GetRank(root->left->left) < GetRank(root->left->right))
+            {
+                ++rotations;
+                RotateLeft(root->left);
+            }
+            RotateRight(root);
+        }
+        else if (rankDiffRight == 2)
+        {
+            if (GetRank(root->right->right) < GetRank(root->right->left))
+            {
+                ++rotations;
+                RotateRight(root->right);
+            }
+            RotateLeft(root);
+        }
+        SetRank(root);
+    }
+
+public:
+    int getSize()
+    {
+        return size;
+    }
+
+    void Add(double value)
+    {
+        Add(value, parentRoot);
+    }
+
+    void InorderWalk()
+    {
+        InorderWalk(parentRoot);
+    }
+
+    void Remove(double value)
+    {
+        Remove(parentRoot, value);
+    }
+
+    void Search(double value)
+    {
+        Search(value, parentRoot);
+    }
+
+    double Successor(double value)
+    {
+        Node* temp = Search(value, parentRoot);
+        if (temp == nullptr) return -1;
+        return Successor(temp);
+    }
+
+    double Predecessor(double value)
+    {
+        Node* temp = Search(value, parentRoot);
+        if (temp == nullptr) return -1;
+        return Predecessor(temp);
+    }
+
+    double** FindRange(double floor, double ceil)
+    {
+        return FindRange(parentRoot, floor, ceil);
+    }
+
+    int getHeight()
+    {
+        return getHeight(parentRoot);
+    }
+
+    int getVisitedNodes()
+    {
+        return visitedNodes;
+    }
+
+    void performRandomOperation(int numOperations)
+    {
+        random_device rd;
+        mt19937 gen(rd());
+        uniform_int_distribution<int> dist(1, 1000000);
+
+        for (int i = 0; i < numOperations; ++i)
+        {
+            int operationType = dist(gen) % 3;
+            double value = dist(gen) % 1000000;
+
+            switch (operationType)
+            {
+            case 0:
+            Search(value, parentRoot);
+            break;
+
+            case 1:
+            Add(value);
+            break;
+
+            case 2:
+            Remove(value);
+            break;
+
+            default:
+            cout << "Error\n";
+            break;
+            }
+        }
+    }
+
+    int getRotations()
+    {
+        return rotations;
+    }
+};
+
+
+int main()
+{
+    WavlTree tree;
+
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> dist(1, 1000000);
+
+    for (int i = 0; i < 1000000; ++i)
+    {
+        tree.Add(dist(gen));
+    }
+
+    int firstlyVisitedNodes = tree.getVisitedNodes();
+    int firstlyRotations = tree.getRotations();
+    cout << "Visited nodes count before 20000 operations: " << tree.getVisitedNodes() << endl;
+    cout << "Rotations count before 20000 operations: " << tree.getRotations() << endl;
+
+    tree.performRandomOperation(20000);
+
+    cout << "Height of the tree: " << tree.getHeight() << endl;
+    cout << "Visited nodes count during 20000 operations: " << tree.getVisitedNodes() - firstlyVisitedNodes << endl;
+    cout << "Rotations count during 20000 operations: " << tree.getRotations() - firstlyRotations << endl;
+}
